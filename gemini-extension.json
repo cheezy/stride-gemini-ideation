@@ -1,0 +1,6 @@
+{
+  "name": "stride-gemini-ideation",
+  "version": "0.1.0",
+  "description": "Ideation commands, skill, and custom agents for Stride kanban — Gemini CLI edition. Turns a fuzzy idea into a committed requirements doc (/ideate) and seeds a Stride backlog from it (/stridify).",
+  "contextFileName": "GEMINI.md"
+}
