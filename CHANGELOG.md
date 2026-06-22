@@ -5,6 +5,12 @@ All notable changes to the Stride Ideation extension for Gemini CLI are document
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- **Audit: the installer does not overwrite a user's project-root `GEMINI.md` (no fix needed).** Reviewed `install.sh` and `install.ps1` for the `AGENTS.md`-overwrite class of bug found in the OpenCode/Codex ideation installers. Both installers copy `GEMINI.md` — and every other file — only into the Gemini **extension directory** (`.gemini/extensions/stride-gemini-ideation/` in project mode, or `~/.gemini/extensions/stride-gemini-ideation/` globally), never the project root. No installer line writes a context file to the project root, so a user-authored project-root `GEMINI.md` is never clobbered. The Gemini extension model keeps the bundled `GEMINI.md` self-contained within the extension dir, so the managed-block guard applied to the OpenCode/Codex installers is unnecessary here and was intentionally not added.
+
 ## [0.2.0] - 2026-06-17
 
 Human-interaction improvements ported from [`cheezy/stride-ideation`](https://github.com/cheezy/stride-ideation) (G235) — the lower-friction, higher-confidence ideation flow, adapted to Gemini CLI.
