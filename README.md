@@ -75,7 +75,7 @@ Add `.stride_auth.md` to your `.gitignore` — it holds a secret token. The bund
 
 ### /ideate
 
-Drives the round-based ideation loop defined by the `stride-ideation` skill: Rounds 1–2 capture Goal/Problem/Outcome and the boundary conditions; Round 3 is a mandatory framing checkpoint; Round 4 is a mandatory premortem that folds failure modes into the Assumptions section and ranks them; the `lean-startup` profile adds a Round 5 MVP-design batch. After all seven sections have content, the `requirements-reviewer` agent runs an advisory pass, then the doc is written and committed. The terminal state is the written document — `/ideate` never auto-invokes `/stridify`.
+Drives the round-based ideation loop defined by the `stride-ideation` skill: Rounds 1–2 capture Goal/Problem/Outcome and the boundary conditions; Round 3 is a mandatory framing checkpoint; Round 4 is a mandatory premortem that folds failure modes into the Assumptions section and ranks them; the `lean-startup` profile adds a Round 5 MVP-design batch. After the premortem (and the Round-5 batch under `lean-startup`) and before the reviewer pass, a mandatory, profile-independent **challenge gate** stress-tests the design via four components — an assumption-confidence audit (rate every assumption `high`/`medium`/`low`), a blind-spot scan, two distinct alternative approaches, and a cost/risk/complexity/timeline trade-off comparison — surfaced through Gemini CLI's question UI (not Claude Code's `AskUserQuestion`) as a single multi-select decision with an explicit "Challenge nothing — write as-is" choice. The gate is advisory and never blocks the write: the confidence ratings fold into the Assumptions entries in place, and the blind spots, the two alternatives, and the trade-off comparison fold into a new optional `## Design challenge` section (not one of the seven gated sections). After all seven sections have content, the `requirements-reviewer` agent runs an advisory pass, then the doc is written and committed. The terminal state is the written document — `/ideate` never auto-invokes `/stridify`.
 
 Profiles: `lean` (default), `product` (adds JTBD framing + Concrete Example section), `discovery` (adds Why-now + Alternatives), `lean-startup` (adds the Round-5 MVP / Validation experiment section).
 
@@ -92,7 +92,7 @@ Validates the requirements doc's seven sections, preflights `.stride_auth.md`, a
 
 ## Skill and Agents
 
-- **`stride-ideation`** skill — the protocol contract (required sections, shape requirements, rounds, premortem, profiles, terminal state).
+- **`stride-ideation`** skill — the protocol contract (required sections, shape requirements, rounds, premortem, challenge gate, profiles, terminal state).
 - **`requirements-reviewer`** agent — advisory gap review of a draft doc; reports only, never edits.
 - **`requirements-decomposer`** agent — turns a committed doc into a single fenced batch JSON; no prose.
 
