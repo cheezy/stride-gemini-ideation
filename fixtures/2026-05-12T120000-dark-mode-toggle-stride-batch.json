@@ -225,7 +225,7 @@
           },
           "security_considerations": [
             "CSP: an inline <script> in the head requires either a nonce or an explicit allowance in the Content-Security-Policy; a strict nonce CSP will silently drop an un-nonced inline script and reintroduce the flash",
-            "XSS / output encoding: the theme value read from the cookie or the server-injected body data attribute must be validated against the 'light'/'dark' allow-list before being written into data-theme, so an attacker-controlled cookie cannot inject markup or arbitrary attribute content into the inline script",
+            "XSS / output encoding: validate the theme value from the cookie or server-injected data attribute against the 'light'/'dark' allow-list before writing it into data-theme, so an attacker-controlled cookie cannot inject markup into the inline script",
             "Cookie integrity: the guest theme cookie is a low-sensitivity, non-authentication value and must not be trusted as anything more than a UI hint — never used for access decisions"
           ]
         }

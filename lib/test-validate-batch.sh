@@ -68,6 +68,30 @@ assert_fails_with() {
   fi
 }
 
+assert_warns() {
+  # Validator must exit 0 (advisory only) AND stderr must contain the substring.
+  # This is how the non-fatal scored-field and varchar(255) warnings are checked:
+  # they surface on stderr but never change the exit code.
+  local label="$1"
+  local fixture="$2"
+  local needle="$3"
+  local stderr
+  if ! stderr="$(python3 "$VALIDATOR" "$fixture" 2>&1 >/dev/null)"; then
+    FAIL=$(( FAIL + 1 ))
+    printf 'FAIL  %s\n      expected exit 0 (advisory warning) but validator exited non-zero\n      stderr: %s\n' \
+      "$label" "$stderr"
+    return
+  fi
+  if printf '%s' "$stderr" | grep -Fq "$needle"; then
+    PASS=$(( PASS + 1 ))
+    printf 'PASS  %s\n' "$label"
+  else
+    FAIL=$(( FAIL + 1 ))
+    printf 'FAIL  %s\n      expected warning substring: %s\n      actual stderr:          %s\n' \
+      "$label" "$needle" "$stderr"
+  fi
+}
+
 # --- (a) parse_error -------------------------------------------------------
 
 cat > "$TMP/parse_error.json" <<'EOF'
@@ -205,6 +229,10 @@ assert_fails_with "(e) negative dependency index fails" \
   "is negative"
 
 # --- happy paths -----------------------------------------------------------
+#
+# A "clean" document is structurally valid AND carries all five review-queue
+# scored fields on every task with no varchar(255) overflow, so it produces no
+# advisory warnings — assert_ok checks exit 0 with EMPTY stderr.
 
 cat > "$TMP/valid_minimal.json" <<'EOF'
 {
@@ -214,13 +242,13 @@ cat > "$TMP/valid_minimal.json" <<'EOF'
       "title": "Minimal goal",
       "type": "goal",
       "tasks": [
-        {"title": "First task", "type": "work", "dependencies": []}
+        {"title": "First task", "type": "work", "dependencies": [], "testing_strategy": {"unit_tests": ["covers the happy path"]}, "security_considerations": ["scoped to the current user"], "patterns_to_follow": "mirror the sibling module", "pitfalls": ["do not skip validation"], "acceptance_criteria": "the feature works end to end"}
       ]
     }
   ]
 }
 EOF
-assert_ok "valid minimal document with one goal and one task" \
+assert_ok "valid minimal document with one goal and one fully-scored task" \
   "$TMP/valid_minimal.json"
 
 cat > "$TMP/valid_chained_deps.json" <<'EOF'
@@ -230,15 +258,15 @@ cat > "$TMP/valid_chained_deps.json" <<'EOF'
       "title": "Chained deps",
       "type": "goal",
       "tasks": [
-        {"title": "First", "type": "work", "dependencies": []},
-        {"title": "Second", "type": "work", "dependencies": [0]},
-        {"title": "Third", "type": "work", "dependencies": [0, 1]}
+        {"title": "First", "type": "work", "dependencies": [], "testing_strategy": {"unit_tests": ["t"]}, "security_considerations": ["s"], "patterns_to_follow": "p", "pitfalls": ["pf"], "acceptance_criteria": "ac"},
+        {"title": "Second", "type": "work", "dependencies": [0], "testing_strategy": {"unit_tests": ["t"]}, "security_considerations": ["s"], "patterns_to_follow": "p", "pitfalls": ["pf"], "acceptance_criteria": "ac"},
+        {"title": "Third", "type": "work", "dependencies": [0, 1], "testing_strategy": {"unit_tests": ["t"]}, "security_considerations": ["s"], "patterns_to_follow": "p", "pitfalls": ["pf"], "acceptance_criteria": "ac"}
       ]
     }
   ]
 }
 EOF
-assert_ok "valid document with chained sibling dependencies" \
+assert_ok "valid document with chained sibling dependencies (all tasks fully scored)" \
   "$TMP/valid_chained_deps.json"
 
 cat > "$TMP/valid_string_dep.json" <<'EOF'
@@ -248,7 +276,7 @@ cat > "$TMP/valid_string_dep.json" <<'EOF'
       "title": "String identifier dep",
       "type": "goal",
       "tasks": [
-        {"title": "First", "type": "work", "dependencies": ["W47"]}
+        {"title": "First", "type": "work", "dependencies": ["W47"], "testing_strategy": {"unit_tests": ["t"]}, "security_considerations": ["s"], "patterns_to_follow": "p", "pitfalls": ["pf"], "acceptance_criteria": "ac"}
       ]
     }
   ]
@@ -256,6 +284,102 @@ cat > "$TMP/valid_string_dep.json" <<'EOF'
 EOF
 assert_ok "valid: string identifier dependencies are not bounds-checked" \
   "$TMP/valid_string_dep.json"
+
+# --- advisory warning: missing scored fields (non-fatal, exit 0) -----------
+
+cat > "$TMP/warn_missing_scored.json" <<'EOF'
+{
+  "goals": [
+    {
+      "title": "Goal with an under-scored task",
+      "type": "goal",
+      "tasks": [
+        {"title": "Bare task", "type": "work", "dependencies": []}
+      ]
+    }
+  ]
+}
+EOF
+assert_warns "advisory: task missing scored fields warns but exits 0" \
+  "$TMP/warn_missing_scored.json" \
+  "is missing scored field 'testing_strategy'"
+assert_warns "advisory: missing scored field names security_considerations" \
+  "$TMP/warn_missing_scored.json" \
+  "is missing scored field 'security_considerations'"
+
+# An empty scored field (present but empty) is also treated as missing.
+cat > "$TMP/warn_empty_scored.json" <<'EOF'
+{
+  "goals": [
+    {
+      "title": "Goal with an empty-scored task",
+      "type": "goal",
+      "tasks": [
+        {"title": "Empty pitfalls task", "type": "work", "dependencies": [], "testing_strategy": {"unit_tests": ["t"]}, "security_considerations": ["s"], "patterns_to_follow": "p", "pitfalls": [], "acceptance_criteria": "ac"}
+      ]
+    }
+  ]
+}
+EOF
+assert_warns "advisory: an empty scored field counts as missing" \
+  "$TMP/warn_empty_scored.json" \
+  "is missing scored field 'pitfalls'"
+
+# --- advisory warning: varchar(255) overflow (non-fatal, exit 0) -----------
+# Build fixtures whose title / security_considerations element exceed 255 code
+# points using Python, so the length is unambiguous regardless of the shell.
+
+python3 - "$TMP/warn_long_title.json" <<'PY'
+import json, sys
+long_title = "T" * 300
+doc = {"goals": [{"title": "Length goal", "type": "goal", "tasks": [
+    {"title": long_title, "type": "work", "dependencies": [],
+     "testing_strategy": {"unit_tests": ["t"]}, "security_considerations": ["s"],
+     "patterns_to_follow": "p", "pitfalls": ["pf"], "acceptance_criteria": "ac"}
+]}]}
+with open(sys.argv[1], "w", encoding="utf-8") as fh:
+    json.dump(doc, fh)
+PY
+assert_warns "advisory: a title over 255 code points warns but exits 0" \
+  "$TMP/warn_long_title.json" \
+  "over the 255 varchar limit"
+
+python3 - "$TMP/warn_long_sec_elem.json" <<'PY'
+import json, sys
+long_elem = "S" * 300
+doc = {"goals": [{"title": "Array length goal", "type": "goal", "tasks": [
+    {"title": "Task", "type": "work", "dependencies": [],
+     "testing_strategy": {"unit_tests": ["t"]}, "security_considerations": [long_elem],
+     "patterns_to_follow": "p", "pitfalls": ["pf"], "acceptance_criteria": "ac"}
+]}]}
+with open(sys.argv[1], "w", encoding="utf-8") as fh:
+    json.dump(doc, fh)
+PY
+assert_warns "advisory: a security_considerations element over 255 code points warns" \
+  "$TMP/warn_long_sec_elem.json" \
+  "security_considerations[0] is 300 code points"
+
+# --- structural checks stay FATAL even when advisories would also apply -----
+# A doc that is BOTH structurally invalid AND under-scored must still exit 1
+# with the structural message; warnings never run when a structural check fails.
+
+cat > "$TMP/fatal_beats_warning.json" <<'EOF'
+{
+  "goals": [
+    {
+      "title": "Structurally broken and under-scored",
+      "type": "goal",
+      "tasks": [
+        {"title": "First", "type": "work", "dependencies": []},
+        {"title": "Second", "type": "work", "dependencies": [9]}
+      ]
+    }
+  ]
+}
+EOF
+assert_fails_with "structural error stays fatal even when scored fields are missing" \
+  "$TMP/fatal_beats_warning.json" \
+  "references index 9 but goal only has 2 tasks"
 
 # --- summary --------------------------------------------------------------
 
