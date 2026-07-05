@@ -75,6 +75,7 @@ The root key is **`"goals"` — never `"tasks"`**. Sending `{"tasks": [...]}` is
           "acceptance_criteria": "string — newline-separated criteria (NOT an array)",
           "patterns_to_follow": "string — newline-separated (NOT an array)",
           "pitfalls": ["string"],
+          "security_considerations": ["string"],
           "dependencies": [0],
           "key_files": [
             {"file_path": "lib/app/foo.ex", "note": "why touched", "position": 0}
@@ -95,6 +96,18 @@ The root key is **`"goals"` — never `"tasks"`**. Sending `{"tasks": [...]}` is
   ]
 }
 ```
+
+## The five review-queue scored fields
+
+The Stride review queue scores five per-task fields for completeness and quality. Tasks that omit them ship into the queue scoring low, so **every task you emit should carry all five** with realistic, task-specific values:
+
+1. **`testing_strategy`** — flat object of `unit_tests`, `integration_tests`, `manual_tests`, `edge_cases`, `coverage_target` (values are strings or arrays of strings).
+2. **`security_considerations`** — array of strings naming the security surface the task touches (auth, user input, data-access scoping, PII, injection). For a task with no meaningful security surface, say so explicitly rather than omitting the field.
+3. **`patterns_to_follow`** — newline-separated string of existing patterns the implementing agent should mirror.
+4. **`pitfalls`** — array of strings naming what NOT to do.
+5. **`acceptance_criteria`** — newline-separated string defining done.
+
+The canonical skeleton above and every worked example below carry all five. Do not drop any of them from a task to save space — a sparsely-scored task is exactly the failure this contract prevents.
 
 ## Field-format reference (the four most common mistakes)
 
@@ -170,6 +183,7 @@ Input (excerpt): a requirements doc for "add a dark mode toggle" — single seam
           "acceptance_criteria": "All hardcoded Tailwind colors in core_components.ex replaced with daisyUI semantic tokens\nLight-mode rendering unchanged on the 14 known routes\nGrep for `bg-white`, `text-gray-900`, `border-gray-200` in core_components returns zero hits",
           "patterns_to_follow": "Use daisyUI semantic tokens listed in app.css (bg-base-100, text-base-content, border-base-300, etc.)\nDo not introduce hex colors or arbitrary Tailwind values",
           "pitfalls": ["Do not change component prop names or behavior — color migration only"],
+          "security_considerations": ["Presentation-only change — introduces no new user input, auth, or data-access surface", "Confirm no class names are built from user-controlled values, so the token swap cannot become a CSS-injection vector"],
           "dependencies": [],
           "key_files": [
             {"file_path": "lib/app_web/components/core_components.ex", "note": "Color migration target", "position": 0}
@@ -177,7 +191,14 @@ Input (excerpt): a requirements doc for "add a dark mode toggle" — single seam
           "verification_steps": [
             {"step_type": "command", "step_text": "grep -E 'bg-white|text-gray-900|border-gray-200' lib/app_web/components/core_components.ex", "expected_result": "no matches", "position": 0},
             {"step_type": "manual", "step_text": "Spot-check 3 routes in light mode in the browser", "expected_result": "Visual rendering unchanged from baseline", "position": 1}
-          ]
+          ],
+          "testing_strategy": {
+            "unit_tests": ["Assert core_components render output contains no hardcoded bg-white/text-gray-900/border-gray-200 classes"],
+            "integration_tests": ["Render each of the 14 known routes and assert daisyUI tokens resolve under both data-theme=light and data-theme=dark"],
+            "manual_tests": ["Toggle light mode and eyeball 3 representative routes for regressions"],
+            "edge_cases": ["Components with conditional classes", "Components that already use semantic tokens (must not double-migrate)"],
+            "coverage_target": "core_components.ex color usages fully migrated"
+          }
         }
       ]
     }
@@ -215,6 +236,7 @@ Input (excerpt): a requirements doc for "notifications system" — three orthogo
           "acceptance_criteria": "notification_requested event has a documented shape\nOban queue named :notifications exists and is supervised\nWorker stub dedupes by (recipient_id, event_class) before insert\nUnit test covers the dedupe path",
           "patterns_to_follow": "Mirror the existing Oban worker pattern in lib/app/workers/\nUse the existing telemetry helpers; do not add ad-hoc Logger.info calls",
           "pitfalls": ["Do not bypass the audit-log infrastructure — every notification dispatch must be logged"],
+          "security_considerations": ["Scope the dedupe key by recipient_id so one recipient's events can never collide with or leak into another's", "Do not log full notification payloads — they may carry PII; log only recipient_id and event_class", "Validate event_class against a known allow-list so a poisoned event cannot enqueue arbitrary worker behavior"],
           "dependencies": [],
           "key_files": [
             {"file_path": "lib/app/notifications/queue.ex", "note": "New module — event shape + queue config", "position": 0},
@@ -223,7 +245,14 @@ Input (excerpt): a requirements doc for "notifications system" — three orthogo
           ],
           "verification_steps": [
             {"step_type": "command", "step_text": "mix test test/app/notifications/queue_test.exs", "expected_result": "All tests pass", "position": 0}
-          ]
+          ],
+          "testing_strategy": {
+            "unit_tests": ["Enqueue two events with the same (recipient_id, event_class) and assert only one row persists", "Enqueue events differing only by recipient_id and assert both persist"],
+            "integration_tests": ["Drain the :notifications Oban queue and assert the worker processes a deduped event end-to-end"],
+            "manual_tests": [],
+            "edge_cases": ["Concurrent inserts racing on the same dedupe key", "Empty or unknown event_class", "Recipient deleted between enqueue and drain"],
+            "coverage_target": "Dedupe path and worker perform/1 fully covered"
+          }
         }
       ]
     }
@@ -265,6 +294,7 @@ The decomposer would split at the layer seam and emit two goals in claim order. 
           "acceptance_criteria": "Schema module exists at lib/app/notifications/notification.ex\nChangeset validates required fields\nUnit test exercises the changeset happy + error paths",
           "patterns_to_follow": "Mirror lib/app/accounts/user.ex for changeset structure\nUse Ecto.Schema, not embedded_schema",
           "pitfalls": ["Do not name the recipient field 'user_id' — keep it explicit as recipient_id"],
+          "security_considerations": ["Cast only recipient_id, event_class, and payload in the changeset — never allow read_at to be mass-assigned from untrusted input", "recipient_id must be a validated belongs_to so a notification cannot be created for a non-existent or unauthorized user", "Treat payload as untrusted data at render time — its contents must be escaped, never rendered raw"],
           "dependencies": [],
           "key_files": [
             {"file_path": "lib/app/notifications/notification.ex", "note": "New schema", "position": 0},
@@ -272,7 +302,14 @@ The decomposer would split at the layer seam and emit two goals in claim order. 
           ],
           "verification_steps": [
             {"step_type": "command", "step_text": "mix test test/app/notifications/notification_test.exs", "expected_result": "All tests pass", "position": 0}
-          ]
+          ],
+          "testing_strategy": {
+            "unit_tests": ["Changeset with all required fields is valid", "Changeset missing recipient_id or event_class is invalid", "read_at is not settable through the public changeset"],
+            "integration_tests": [],
+            "manual_tests": [],
+            "edge_cases": ["payload is an empty map", "event_class not in the allow-list"],
+            "coverage_target": "Notification changeset happy and error paths covered"
+          }
         }
         // ... 5 more tasks: migration, preferences schema, create_notification, list_for_user, mark_read context functions
       ]
@@ -299,6 +336,7 @@ The decomposer would split at the layer seam and emit two goals in claim order. 
           "acceptance_criteria": "Route /notifications maps to NotificationsLive\nMount calls MyApp.Notifications.list_for_user(current_user)\nRender shows the list with mark-read buttons\nLiveView test asserts mount + handle_event(\"mark_read\", ...)",
           "patterns_to_follow": "Mirror lib/app_web/live/dashboard/dashboard_live.ex for LiveView structure\nUse the existing Layouts.app wrapper",
           "pitfalls": ["Do not call MyApp.Repo directly — go through MyApp.Notifications"],
+          "security_considerations": ["mount and list_for_user must scope strictly to current_scope.user — never load another user's notifications", "handle_event(\"mark_read\", ...) must verify the target notification belongs to the current user before mutating it, so a forged id cannot mark someone else's notification read", "Treat the notification id from handle_event params as untrusted input — validate it against the loaded list"],
           "dependencies": [],
           "key_files": [
             {"file_path": "lib/app_web/live/notifications/notifications_live.ex", "note": "New LiveView", "position": 0},
@@ -307,7 +345,14 @@ The decomposer would split at the layer seam and emit two goals in claim order. 
           ],
           "verification_steps": [
             {"step_type": "command", "step_text": "mix test test/app_web/live/notifications/notifications_live_test.exs", "expected_result": "All tests pass", "position": 0}
-          ]
+          ],
+          "testing_strategy": {
+            "unit_tests": ["mount loads only the current user's notifications", "handle_event(\"mark_read\", ...) marks a notification read", "handle_event(\"mark_read\", ...) with an id the user does not own is rejected"],
+            "integration_tests": ["Log in as one user and assert another user's notifications never appear in the rendered list"],
+            "manual_tests": ["Click mark-read in the browser and confirm the item updates without a full reload"],
+            "edge_cases": ["Empty notification list", "mark_read on an already-read notification", "mark_read with a non-existent id"],
+            "coverage_target": "LiveView mount and handle_event paths covered"
+          }
         }
         // ... 7 more tasks: Presence wiring, unread badge, preferences form component, header indicator, mark-all-read action, route auth, telemetry
       ]
