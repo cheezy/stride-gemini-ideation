@@ -35,6 +35,27 @@
           ],
           "verification_steps": [
             {"step_type": "command", "step_text": "grep -E 'bg-white|text-gray-[0-9]|border-gray-[0-9]' lib/app_web/components/core_components.ex", "expected_result": "no matches", "position": 0}
+          ],
+          "testing_strategy": {
+            "unit_tests": [
+              "Render each core_components function component and assert no output contains bg-white, text-gray-*, or border-gray-* classes",
+              "Assert migrated components still emit their original semantic markup (button, input, modal wrappers) so only color classes changed"
+            ],
+            "integration_tests": [
+              "Render each of the 14 known routes in a LiveView test and assert the components using core_components still mount without markup errors after the token swap"
+            ],
+            "manual_tests": [
+              "Load a representative route in light mode and compare against the pre-migration baseline for visual parity",
+              "Flip data-theme to dark in the browser and confirm core_components elements pick up the dark palette without leftover white backgrounds"
+            ],
+            "edge_cases": [
+              "Components with conditional/state-based color classes (error, disabled, hover) must map every branch to a semantic token, not just the default state",
+              "Arbitrary Tailwind color values in brackets (e.g. bg-[#fff]) must also be caught, not only the named gray/white classes"
+            ],
+            "coverage_target": "grep for hardcoded Tailwind color classes returns zero hits in core_components.ex; existing component test coverage maintained"
+          },
+          "security_considerations": [
+            "No security surface: this is a pure presentational CSS class migration with no change to auth, data access, user input handling, or rendered dynamic content"
           ]
         },
         {
@@ -53,6 +74,27 @@
           ],
           "verification_steps": [
             {"step_type": "manual", "step_text": "Open a modal in light mode and confirm visual rendering unchanged from baseline", "expected_result": "No visual regression", "position": 0}
+          ],
+          "testing_strategy": {
+            "unit_tests": [
+              "Render delayed_modal and assert the backdrop uses bg-base-200/90 rather than bg-black/50 or any hardcoded color",
+              "Assert no bg-white, text-gray-*, or border-gray-* classes remain in the rendered modal markup"
+            ],
+            "integration_tests": [
+              "Trigger a modal open in a LiveView test and assert the overlay and content wrappers render with the daisyUI token classes"
+            ],
+            "manual_tests": [
+              "Open a modal in light mode and confirm it is visually unchanged from the baseline",
+              "Open the same modal in dark mode and confirm the backdrop and panel both adopt the dark palette with adequate contrast"
+            ],
+            "edge_cases": [
+              "Backdrop opacity must remain visually equivalent after switching from bg-black/50 to bg-base-200/90 in both themes",
+              "Stacked or nested modals must not show a leftover light-mode backdrop layer"
+            ],
+            "coverage_target": "grep for hardcoded Tailwind color classes returns zero hits in delayed_modal.ex; token choices match core_components.ex"
+          },
+          "security_considerations": [
+            "No security surface: color-only migration of the modal component; modal interaction logic and any focus-trap behavior are untouched"
           ]
         },
         {
@@ -72,6 +114,31 @@
           ],
           "verification_steps": [
             {"step_type": "command", "step_text": "mix ecto.migrate", "expected_result": "migration runs successfully", "position": 0}
+          ],
+          "testing_strategy": {
+            "unit_tests": [
+              "Assert the User (or UserPreferences) changeset casts theme and rejects values other than 'light' or 'dark'",
+              "Assert the schema field defaults to 'light' when no theme is provided",
+              "Assert the check constraint surfaces as a changeset error (not a raw DB exception) on an invalid theme value"
+            ],
+            "integration_tests": [
+              "Insert a user_preferences row without a theme and assert it reads back as 'light'",
+              "Run the migration up then down on a clean test DB and assert the schema is added and cleanly reverted"
+            ],
+            "manual_tests": [
+              "Run mix ecto.migrate against the dev DB and confirm the column and check constraint exist"
+            ],
+            "edge_cases": [
+              "Pre-existing user_preferences rows must fall back to the default rather than being backfilled",
+              "Case sensitivity: 'Dark' or 'LIGHT' should be rejected by the check constraint, only lowercase allowed",
+              "Table-absent path: migration must create user_preferences if it does not already exist"
+            ],
+            "coverage_target": "mix ecto.migrate runs successfully; new changeset/validation branches for the theme field covered by tests"
+          },
+          "security_considerations": [
+            "Data-access scoping: the theme preference must be written and read only for the current authenticated user's own user_preferences row, never keyed by a client-supplied user id",
+            "Input validation: constrain theme to the 'light'/'dark' allow-list via changeset validation plus a DB check constraint to prevent arbitrary strings being persisted",
+            "No PII: the stored value is a low-sensitivity UI preference, not personal data"
           ]
         },
         {
@@ -91,6 +158,32 @@
           ],
           "verification_steps": [
             {"step_type": "manual", "step_text": "Click the toggle in both modes; observe no FOUC and the preference persists across reloads", "expected_result": "Smooth transition, persistent state", "position": 0}
+          ],
+          "testing_strategy": {
+            "unit_tests": [
+              "Render the theme_toggle component and assert it emits a button with the sun/moon icon and an accessible label",
+              "Assert the button carries the phx-click event and is reachable/activatable via keyboard (Enter/Space), not click-only"
+            ],
+            "integration_tests": [
+              "In a LiveView test, mount the header, send the toggle event, and assert the user's theme preference is updated through the Accounts context (not Repo directly)",
+              "Assert the toggle event pushes the data-theme attribute change to the client (push_event / JS hook) so the DOM flips without a full re-render"
+            ],
+            "manual_tests": [
+              "Click the toggle in both light and dark mode and confirm the flip happens under ~50ms with no wrong-theme flash",
+              "Reload the page after toggling and confirm the chosen theme persists across the session",
+              "Tab to the toggle and activate it with Enter and Space to confirm keyboard accessibility"
+            ],
+            "edge_cases": [
+              "Rapid double-clicks must not desync the persisted preference from the visible theme",
+              "Guest (unauthenticated) users toggling before login should still flip the theme without erroring on the missing preference row",
+              "The attribute push must land before the LiveView re-render to avoid a wrong-theme paint on toggle"
+            ],
+            "coverage_target": "Component render, keyboard activation, and preference-update event paths covered; toggle event handler branches exercised in tests"
+          },
+          "security_considerations": [
+            "Data-access scoping: the toggle must update only the current authenticated user's preference via MyApp.Accounts using current_scope, never a user id taken from the client event payload",
+            "User input handling: the toggle event should switch between the known 'light'/'dark' values server-side rather than persisting an arbitrary theme string sent from the DOM",
+            "Authorization: the phx-click handler must reject preference writes from an unauthenticated socket (or scope them to the guest cookie), preventing one session from mutating another user's preference"
           ]
         },
         {
@@ -109,6 +202,31 @@
           ],
           "verification_steps": [
             {"step_type": "manual", "step_text": "Hard-reload in dark mode and watch for a flash — there must be none", "expected_result": "No flash", "position": 0}
+          ],
+          "testing_strategy": {
+            "unit_tests": [
+              "Render root.html.heex for an authenticated user and assert the body carries the server-rendered theme data attribute matching the user's stored preference",
+              "Assert the inline theme script appears in the head before any <link rel=\"stylesheet\"> tag"
+            ],
+            "integration_tests": [
+              "Request a page as a guest with a theme cookie set to 'dark' and assert the inline script path reads the cookie value",
+              "Request a page as an authenticated dark-mode user and assert the rendered document seeds data-theme from the body data attribute, not the cookie"
+            ],
+            "manual_tests": [
+              "Hard-reload a route in dark mode and watch for a wrong-theme flash on first paint — there must be none",
+              "Clear the cookie and load as a guest to confirm the fallback path defaults cleanly without a flash"
+            ],
+            "edge_cases": [
+              "Missing/invalid cookie or data attribute must fall back to the default theme without throwing and blanking the page",
+              "Script must set data-theme on <html> before stylesheets load to actually beat the FOUC window",
+              "Inline script must stay under 500 bytes so it does not bloat the document head"
+            ],
+            "coverage_target": "Inline script presence and ordering asserted in the root layout render test; authenticated (data-attribute) and guest (cookie) branches both covered"
+          },
+          "security_considerations": [
+            "CSP: an inline <script> in the head requires either a nonce or an explicit allowance in the Content-Security-Policy; a strict nonce CSP will silently drop an un-nonced inline script and reintroduce the flash",
+            "XSS / output encoding: the theme value read from the cookie or the server-injected body data attribute must be validated against the 'light'/'dark' allow-list before being written into data-theme, so an attacker-controlled cookie cannot inject markup or arbitrary attribute content into the inline script",
+            "Cookie integrity: the guest theme cookie is a low-sensitivity, non-authentication value and must not be trusted as anything more than a UI hint — never used for access decisions"
           ]
         }
       ]
