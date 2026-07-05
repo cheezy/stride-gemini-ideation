@@ -5,6 +5,31 @@ All notable changes to the Stride Ideation extension for Gemini CLI are document
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-07-05
+
+Review-queue quality and shipping-attribution enhancements — the decomposer, validator, and `/stridify` pipeline now steer toward tasks that score well in the Stride review queue, and shipped goals are attributed to the agent that created them. Eight changes across new behavior, fixture calibration, and documentation cleanup.
+
+### Added
+
+- **Validator advisory warnings** — `lib/validate_batch.py` now emits **non-fatal** advisory warnings to stderr (exit code stays 0) after the five structural checks pass: (1) any task missing one of the five review-queue scored fields (`testing_strategy`, `security_considerations`, `patterns_to_follow`, `pitfalls`, `acceptance_criteria`); (2) any length-limited field exceeding Stride's 255 code-point `varchar` limit — the five scalar `varchar(255)` fields (incl. `title`) or an element of the `varchar(255)[]` array fields (incl. `security_considerations`). The five structural checks stay fatal; warnings never change the exit code, so a valid-but-under-scored batch is not blocked. Field lists mirror the canonical Stride task schema; code-point counting matches the server's changeset guard. Covered in lockstep by `lib/test-validate-batch.{sh,ps1}`.
+- **`created_by_agent` stamping in `/stridify`** — `commands/stridify.toml` Step 8 now stamps `created_by_agent` onto every goal before the `POST /api/tasks/batch`, so shipped goals are attributed to the agent on Stride's `/agents` "created" view instead of `?` (the field is not backfillable via PATCH). It is a real API field kept **off** `lib/strip_audit_fields.py`'s `LOCAL_AUDIT_FIELDS`, and a `created_by_agent`-survives-stripping test was added to `lib/test-ship-helpers.{sh,ps1}`.
+
+### Changed
+
+- **Decomposer contract enumerates and exemplifies all five scored fields** — `agents/requirements-decomposer.md` adds `security_considerations` to the canonical skeleton task block, populates all five review-queue scored fields on a fully-worked task in each of the three examples, and adds a "five review-queue scored fields" subsection instructing that every emitted task carry them.
+- **Calibration fixtures carry all five scored fields** — every task across the three `fixtures/*-stride-batch.json` calibration fixtures (5 + 16 + 14 tasks) now includes `testing_strategy`, `security_considerations`, `patterns_to_follow`, and `pitfalls` with realistic, domain-specific values, so the reference for "good decomposer output" models fully-scored tasks.
+
+### Fixed
+
+- **Reviewer check-count contradiction and `/ideate` enforcement-list omission** — `agents/requirements-reviewer.md` said "All three checks" where five profile-aware checks exist ("three" → "five"), and `commands/ideate.toml`'s enforcement list omitted the mandatory Round-5 MVP-design batch (`profile=lean-startup` only); a bullet was added.
+- **Stale `/decompose` and `/ship` command references** — the removed commands (merged into `/stridify`) were corrected to `/stridify` (or the correct current behavior) in `lib/test-stamping.sh`, `lib/test-ship-helpers.sh`, `lib/filename.sh`, and the notifications requirements fixture; the paired batch's `source_spec_sha256` was re-stamped to keep the audit pair consistent.
+- **Copilot-port residue in the fixtures docs** — `fixtures/README.md` and `fixtures/SMOKE-TEST-NOTE.md` were rewritten to name Gemini CLI, the real `/ideate` and `/stridify` commands, and the single `stride-ideation` skill (dropping the nonexistent `stride-ideation-stridify`/`stride-ideation-ideate` skill names and the `Copilot CLI` phrasing); the smoke-test note now reports the actual **14 assertions across six stages** result (was a stale "10 passed") and cites `commands/stridify.toml` as the response-render source.
+- **Orphaned drift check documented** — `/stridify` intentionally omits the `source_spec` drift check (`commands/stridify.toml` Step 8d), so the smoke runners' `/stride-ideation:ship` self-description was corrected to `/stridify` and `lib/drift_check.py` is now documented as a standalone fixture-integrity utility (exercised by the smoke test's Stage 2 and `test-drift-check`), not a pipeline step.
+
+### Notes
+
+- **No marketplace pin.** `stride-gemini-ideation` is published on no marketplace (there is no `marketplace.json` in the repo), so this release is a git tag + GitHub release on the `stride-gemini-ideation` repo only — no marketplace catalog update is required or performed.
+
 ## [0.3.0] - 2026-06-26
 
 ### Added
