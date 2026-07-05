@@ -46,7 +46,7 @@ This initiative naturally splits into three orthogonal seams that can ship indep
 
 3. **Email rendering and dispatch** — `lib/kanban/notifications/email_renderer.ex` (new). Three event-class templates that render to a shared shell (header / footer / unsubscribe link). Worker pulls from the Oban queue, checks preferences + DND window, dispatches via the existing mailer.
 
-The seams are deliberately independent so /decompose can split this into separate Stride goals if size demands.
+The seams are deliberately independent so /stridify can split this into separate Stride goals if size demands.
 
 ## Open questions
 - DND window timezone source: account-level setting vs. inferred from email-domain TLD? Lean account-level explicit; revisit if too many users skip it.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Unit tests for the /stride-ideation:ship helpers:
+# Unit tests for the /stridify ship helpers:
 #
 #   - lib/strip_audit_fields.py  strips source_spec/sha256/decomposition_notes
 #   - lib/read_auth.py            extracts STRIDE_API_URL and STRIDE_API_TOKEN
@@ -80,7 +80,7 @@ fi
 
 # AC: the on-disk file must be unchanged after stripping. This is the
 # audit-trail guarantee — the local-audit fields stay on disk so the
-# v0.2 drift check has something to compare against.
+# drift check (lib/drift_check.py) has something to compare against.
 WITH_AUDIT_SHA_AFTER="$(shasum -a 256 "$TMP/with_audit.json" | awk '{print $1}')"
 if [ "$WITH_AUDIT_SHA_BEFORE" = "$WITH_AUDIT_SHA_AFTER" ]; then
   if diff -q "$TMP/with_audit.json.before" "$TMP/with_audit.json" >/dev/null 2>&1; then
