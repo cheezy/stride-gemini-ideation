@@ -93,6 +93,39 @@ else
     "before SHA=$WITH_AUDIT_SHA_BEFORE after SHA=$WITH_AUDIT_SHA_AFTER"
 fi
 
+# --- strip_audit_fields: created_by_agent is a real API field, must survive --
+#
+# created_by_agent is NOT a local-audit field — /stridify Step 8 stamps it onto
+# each goal and it must reach the Stride API (it attributes the goal on the
+# /agents "created" view and is not backfillable via PATCH). Stripping must
+# remove only source_spec/source_spec_sha256/decomposition_notes and leave
+# created_by_agent intact.
+
+cat > "$TMP/with_created_by.json" <<'EOF'
+{
+  "source_spec": "fixtures/x.md",
+  "source_spec_sha256": "abc123",
+  "decomposition_notes": "notes",
+  "goals": [
+    {"title": "G1", "type": "goal", "created_by_agent": "Gemini", "tasks": [{"title": "T1", "type": "work"}]}
+  ]
+}
+EOF
+
+if STRIPPED_CBA="$(python3 "$STRIP" "$TMP/with_created_by.json" 2>&1)"; then
+  if printf '%s' "$STRIPPED_CBA" | grep -q '"created_by_agent"'; then
+    if ! printf '%s' "$STRIPPED_CBA" | grep -q 'source_spec'; then
+      pass "strip: created_by_agent survives (real API field, not stripped)"
+    else
+      fail "strip: created_by_agent survived but audit fields were not removed" "$STRIPPED_CBA"
+    fi
+  else
+    fail "strip: created_by_agent was wrongly stripped" "$STRIPPED_CBA"
+  fi
+else
+  fail "strip: exited non-zero on input carrying created_by_agent" "$STRIPPED_CBA"
+fi
+
 # --- strip_audit_fields: idempotent when fields already absent --------------
 
 cat > "$TMP/no_audit.json" <<'EOF'

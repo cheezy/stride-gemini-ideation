@@ -6,14 +6,20 @@ Usage:
 
 Reads the file at the given path, removes the three local-audit fields
 (`source_spec`, `source_spec_sha256`, `decomposition_notes`) that
-`/stride-ideation:decompose` stamped at the root, and prints the
-API-ready payload to stdout. Exits 0 on success.
+`/stridify` stamped at the root, and prints the API-ready payload to
+stdout. Exits 0 on success.
 
-The resulting JSON is what `/stride-ideation:ship` POSTs to
-Stride's `/api/tasks/batch` endpoint. The three stripped fields are
+The resulting JSON is what `/stridify` POSTs to Stride's
+`/api/tasks/batch` endpoint. The three stripped fields are
 useful for local audit and drift detection but the Stride API does
 not accept them and silently drops them — better to strip
 explicitly so the on-the-wire payload matches the API contract.
+
+`created_by_agent` (stamped onto each goal by `/stridify` Step 8) is
+deliberately NOT a local-audit field: it is a real API column that
+attributes the goal on Stride's /agents "created" view and is not
+backfillable via PATCH, so it MUST survive stripping and reach the
+API. Keep it out of LOCAL_AUDIT_FIELDS.
 
 Exits 1 with a stderr message if the file cannot be read or parsed.
 Field-shape validation is NOT performed here — that is the job of
@@ -24,6 +30,10 @@ import json
 import sys
 
 
+# Exactly the three root-level fields /stridify stamps for local audit/drift and
+# that the Stride batch API does not accept. `created_by_agent` is intentionally
+# absent — it is a real per-goal API field that must reach Stride (see module
+# docstring); adding it here would silently drop attribution on every shipped goal.
 LOCAL_AUDIT_FIELDS = ("source_spec", "source_spec_sha256", "decomposition_notes")
 
 

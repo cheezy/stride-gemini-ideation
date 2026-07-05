@@ -3,7 +3,7 @@ description = "End-to-end pipeline from a stride-ideation requirements doc to cr
 prompt = '''
 # /stridify
 
-Read a stride-ideation requirements markdown document, decompose it into a Stride batch JSON (committed to disk for audit), and POST it to the Stride API in a single invocation. The decomposition logic — natural seams, sizing, multi-goal split rule, batch JSON shape — lives in `agents/requirements-decomposer.md`. This command is the surface: it parses the invocation arguments, validates the input, preflights auth, dispatches the subagent, stamps `source_spec` + `source_spec_sha256`, writes and commits the file, then strips local-audit fields, POSTs to `/api/tasks/batch`, and renders the created G/W identifiers.
+Read a stride-ideation requirements markdown document, decompose it into a Stride batch JSON (committed to disk for audit), and POST it to the Stride API in a single invocation. The decomposition logic — natural seams, sizing, multi-goal split rule, batch JSON shape — lives in `agents/requirements-decomposer.md`. This command is the surface: it parses the invocation arguments, validates the input, preflights auth, dispatches the subagent, stamps `source_spec` + `source_spec_sha256` at the root and `created_by_agent` onto each goal, writes and commits the file, then strips the local-audit fields (but NOT `created_by_agent`, which is a real API field), POSTs to `/api/tasks/batch`, and renders the created G/W identifiers.
 
 **Usage:** `/stridify <path-to-requirements.md> [--goal <name|index>] [--yes]`
 
@@ -439,7 +439,16 @@ Use the **normalized** `SOURCE_SPEC` from Step 6 (relative to repo root, or abso
 2. **Delete** any `source_spec` and `source_spec_sha256` keys the subagent included.
 3. Build a new object whose iteration order is `source_spec`, `source_spec_sha256`, `decomposition_notes`, `goals`.
 
-This is the ONLY mutation made to the subagent's output — every other field (per-goal title, tasks, pitfalls, etc.) is preserved verbatim. The three audit fields are stripped from the API payload in Step 9; they remain on disk as the audit trail that pairs this batch JSON with its source requirements doc.
+This is the ONLY mutation made to the subagent's output at the root — every other field (per-goal title, tasks, pitfalls, etc.) is preserved verbatim. The three audit fields are stripped from the API payload in Step 9; they remain on disk as the audit trail that pairs this batch JSON with its source requirements doc.
+
+**Stamp `created_by_agent` onto each goal (part of 8b).** After the root object is built, set `created_by_agent` to `"Gemini"` on **every** goal object in the `goals` array (the shipping runtime's agent identity — this plugin is the Gemini CLI adapter). This is the one field stamped on the goals rather than the root, and it must happen here, at creation time:
+
+- **Why creation-time.** `created_by_agent` attributes the goal on Stride's `/agents` "created" view. It is **not backfillable via PATCH**, so a goal shipped without it attributes to `"?"` permanently. Stamping it here — after validation, before the write — guarantees every shipped goal carries it.
+- **Stamp on the goal objects, not the decomposer contract.** The `requirements-decomposer` agent MUST NOT emit `created_by_agent` (its allow-list keeps server/orchestrator fields out); `/stridify` is the sole stamper. If the subagent emitted one anyway (regression), overwrite it with `"Gemini"`.
+- **Real API field — survives stripping.** Unlike the three root audit fields, `created_by_agent` is a real Stride column. `lib/strip_audit_fields.py` strips only `source_spec`, `source_spec_sha256`, and `decomposition_notes`; `created_by_agent` passes through to the Step 9 POST untouched. Do NOT add it to that helper's `LOCAL_AUDIT_FIELDS`.
+- **Never touch the token.** This stamping reads and rewrites only the on-disk/in-memory batch JSON — it must not reference `$STRIDE_API_TOKEN` or print it.
+
+Concretely, after building the ordered root object, iterate `doc["goals"]` and set `goal["created_by_agent"] = "Gemini"` for each goal before the write in 8c.
 
 **(8c) Verify path uniqueness and write the file.** Re-run `sti_unique_path` with the same arguments as Step 5 to confirm `TARGET_PATH` is still untaken. If a colliding file appeared between Step 5 and now (concurrent process, manual filesystem action), use the freshly resolved path — never overwrite an existing file.
 

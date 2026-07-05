@@ -73,6 +73,38 @@ if ($shaAfter -match '^[0-9a-f]{64}$') { Pass "on-disk batch JSON unchanged afte
 
 Remove-Item -Force $tmpBatch.FullName -ErrorAction SilentlyContinue
 
+# --- strip_audit_fields.py: created_by_agent survives stripping -----------
+# created_by_agent is a real API field stamped onto each goal by /stridify;
+# it must NOT be stripped (it is not in LOCAL_AUDIT_FIELDS).
+
+$batchCba = @'
+{
+  "source_spec": "docs/foo.md",
+  "source_spec_sha256": "abc123",
+  "decomposition_notes": "note",
+  "goals": [{"title": "G", "type": "goal", "created_by_agent": "Gemini", "tasks": [{"title": "T", "type": "work"}]}]
+}
+'@
+$tmpBatchCba = New-TemporaryFile
+Set-Content -LiteralPath $tmpBatchCba.FullName -Value $batchCba -Encoding UTF8
+
+$strippedCba = & python3 $StripAudit $tmpBatchCba.FullName 2>&1
+if ($LASTEXITCODE -eq 0) {
+    $strippedCbaText = ($strippedCba -join "`n")
+    if ($strippedCbaText -match '"created_by_agent"') {
+        if ($strippedCbaText -match '"source_spec"') {
+            Fail "created_by_agent survived but audit fields were not removed" $strippedCbaText
+        } else {
+            Pass "created_by_agent survives stripping (real API field, not stripped)"
+        }
+    } else {
+        Fail "created_by_agent was wrongly stripped" $strippedCbaText
+    }
+} else {
+    Fail "strip_audit_fields.py exited non-zero on input with created_by_agent" ($strippedCba -join "`n")
+}
+Remove-Item -Force $tmpBatchCba.FullName -ErrorAction SilentlyContinue
+
 Write-Host ''
 Write-Host ("{0} passed, {1} failed" -f $script:PASS, $script:FAIL)
 if ($script:FAIL -gt 0) { exit 1 } else { exit 0 }
