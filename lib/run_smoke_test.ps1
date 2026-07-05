@@ -1,9 +1,11 @@
-# End-to-end smoke test for the stride-ideation-stridify pipeline.
-# PowerShell mirror of run_smoke_test.sh — composes every helper the
-# stridify skill body invokes (in the same order) and verifies each
-# stage produces the expected output. The final HTTP POST is dry-run
-# by default; pass -Live <stride-batch.json> to POST against a real
-# Stride instance using the auth in .stride_auth.md.
+# End-to-end smoke test for the /stridify pipeline.
+# PowerShell mirror of run_smoke_test.sh — composes the helpers the
+# /stridify command body invokes (in the same order) and verifies each
+# stage produces the expected output. (Stage 2's drift_check.py is the
+# exception: /stridify omits the drift check per commands/stridify.toml
+# Step 8d, so that stage runs as a standalone fixture-integrity guard.)
+# The final HTTP POST is dry-run by default; pass -Live <stride-batch.json>
+# to POST against a real Stride instance using the auth in .stride_auth.md.
 #
 # Usage:
 #   pwsh -File lib\run_smoke_test.ps1

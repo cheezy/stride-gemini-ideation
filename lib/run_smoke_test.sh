@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# End-to-end smoke test for the /stride-ideation:ship pipeline.
+# End-to-end smoke test for the /stridify pipeline.
 #
-# Composes every helper the slash command body invokes — in the
-# same order — and verifies each stage produces the expected output.
+# Composes the helpers the /stridify command body invokes — in the same
+# order — and verifies each stage produces the expected output. (Stage 2's
+# drift_check.py is the exception: /stridify omits the drift check per
+# commands/stridify.toml Step 8d, so that stage runs as a standalone
+# fixture-integrity guard rather than a pipeline step — see its comment below.)
 # The final HTTP POST is dry-run by default (no actual network
 # call) so this runner is safe to execute in CI or against any
 # checkout. Pass --live <stride-batch.json> to POST against a real
@@ -72,7 +75,13 @@ else
 fi
 rm -f /tmp/sm-validate.err
 
-# --- Stage 2: drift_check.py ------------------------------------------------
+# --- Stage 2: drift_check.py (fixture-integrity guard, NOT a /stridify step) --
+#
+# /stridify intentionally omits the source_spec drift check (commands/stridify.toml
+# Step 8d), so drift_check.py is not part of the pipeline. The smoke test still
+# exercises it here as a standalone fixture-integrity guard: it confirms the
+# committed *-stride-batch.json's stamped source_spec_sha256 still matches its
+# paired *-requirements.md.
 
 printf '\nStage 2: source-spec drift check\n'
 python3 "${SCRIPT_DIR}/drift_check.py" "$BATCH_PATH" 2>/tmp/sm-drift.err

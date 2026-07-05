@@ -2,6 +2,14 @@
 """Check whether a Stride batch JSON's source_spec has drifted from its
 stamped source_spec_sha256.
 
+Status: this is a **standalone fixture-integrity utility**, exercised by
+`lib/run_smoke_test.sh` (Stage 2) and `lib/test-drift-check.sh`. It is NOT part
+of the `/stridify` pipeline — `/stridify` intentionally omits the source_spec
+drift check (`commands/stridify.toml` Step 8d, "Drift check omitted"), because it
+writes the batch JSON in the same invocation, so source drift cannot occur there.
+The utility remains useful for verifying that a committed `*-stride-batch.json`
+fixture still pairs with its `*-requirements.md` source.
+
 Usage:
     python3 lib/drift_check.py <path-to-stride-batch.json>
 
